@@ -14,7 +14,7 @@
   "body": null,
   "priority": "normal",
   "fingerprint": "sha256:609cfdf8f8335a279aa03c72ccdabd5bee6e2c65b02e746fe774b65280308f1b",
-  "status": "in_review",
+  "status": "merged",
   "runs": [
     "run_01M7YDNE53AYFF1P2BPW05YMCK"
   ],
@@ -108,5 +108,6 @@
         "source": "ran: curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/borrowers/overdue?on=2026-11-30'"
       }
     ]
-  }
+  },
+  "merged_at": "2026-11-21T15:45:42.191Z"
 }
