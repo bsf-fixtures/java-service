@@ -1,0 +1,139 @@
+{
+  "schema": "sandbox/1",
+  "tier": "renders",
+  "tier_reason": null,
+  "commands": {
+    "install": "TS=/tmp/bsf-truststore.p12; CA=\"$(dirname \"$(dirname \"$(readlink -f \"$(command -v java)\")\")\")/lib/security/cacerts\"; if [ ! -s \"$TS\" ] && [ -r \"$CA\" ]; then cp \"$CA\" \"$TS\"; fi; if [ ! -s \"$TS\" ]; then D=\"$(mktemp -d)\"; csplit -sz -f \"$D/c\" -b \"%03d.pem\" /etc/ssl/certs/ca-certificates.crt '/BEGIN CERTIFICATE/' '{*}'; for f in \"$D\"/c*.pem; do keytool -importcert -noprompt -trustcacerts -alias \"$(basename \"$f\" .pem)\" -file \"$f\" -keystore \"$TS\" -storetype PKCS12 -storepass changeit >/dev/null 2>&1 || true; done; rm -rf \"$D\"; fi; mvn -B -ntp -DskipTests dependency:resolve",
+    "build": "mvn -B -ntp -DskipTests package",
+    "run": "mvn -B -ntp spring-boot:run",
+    "test": "mvn -B -ntp test",
+    "seed": null
+  },
+  "app_url": "http://127.0.0.1:8080/loans/overdue?on=2026-11-20",
+  "env": [
+    {
+      "name": "SERVER_PORT",
+      "kind": "self",
+      "value": "8080",
+      "why": "The port Spring Boot binds. The app reads no configuration of its own, so this is Spring's own default made explicit, and it is the port app_url and the runbook use."
+    },
+    {
+      "name": "MAVEN_OPTS",
+      "kind": "self",
+      "value": "-Djavax.net.ssl.trustStore=/tmp/bsf-truststore.p12 -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.repo.local=/tmp/bsf-m2",
+      "why": "Build configuration, not app configuration. Two facts about the sandbox made it necessary: the agent container's HOME/.m2 is root-owned, so Maven cannot create its default local repository, and its JDK truststore is a dangling symlink (/etc/ssl/certs/adoptium is absent), so every HTTPS fetch from Maven Central failed with 'trustAnchors parameter must be non-empty'. The install command puts a valid PKCS12 truststore at that path — copied from the JDK's own cacerts where it is readable, otherwise built from /etc/ssl/certs/ca-certificates.crt — so the same commands work on the runner and in an agent container. No credential: changeit is the stock truststore password and a truststore holds public CA certificates only."
+    }
+  ],
+  "services": [],
+  "egress": [
+    "repo.maven.apache.org",
+    "repo1.maven.org"
+  ],
+  "stubs": [],
+  "dropped": [
+    {
+      "from": ".github/workflows/ci.yml",
+      "what": "actions/setup-java@v4 (Temurin 17) and cache: maven",
+      "why": "Actions plumbing for a hosted runner, not something the app needs installed. The sandbox uses the JDK already on PATH and its own local repository under /tmp; pinning a JDK here would describe CI rather than the app."
+    },
+    {
+      "from": "README.md",
+      "what": "mvn -B -q test and mvn -B -q spring-boot:run",
+      "why": "Carried over, but without -q: the trial and the roles read command output to tell a pass from a silent failure, so quiet mode is dropped and -ntp used instead to keep the log short."
+    }
+  ],
+  "capabilities": {
+    "exercised": [
+      "The whole build: mvn package compiles src/main/java and repackages the Spring Boot fat jar (target/loans-0.1.0.jar).",
+      "The whole test suite: 3 JUnit 5 tests in src/test/java (LoanTest, LoanControllerTest), run by surefire.",
+      "The app running: mvn spring-boot:run starts the embedded Tomcat and GET /loans/overdue answers 200 with the JSON list within ~5s of a warm local repository.",
+      "The HTTP contract of GET /loans/overdue, with and without the ?on= parameter, including ordering (most overdue first) and the daysLate field.",
+      "A browser loading that URL: Chromium renders the JSON response, so a visual check of the endpoint is possible.",
+      "Changes to the overdue rule (Loan.overdueOn / Loan.daysLate), to the controller's mapping and response shape, and to the tests."
+    ],
+    "not_exercised": [
+      {
+        "what": "Any storage. The loan list is a hard-coded List.of in the controller, so nothing here exercises a database, a migration or persistence of any kind, and no service is started.",
+        "paths": [
+          "src/main/java/fixtures/loans/LoanController.java"
+        ],
+        "why": "The repo has no persistence layer to exercise. If one is added, the sandbox needs a database service and this manifest an amendment."
+      },
+      {
+        "what": "Clock-dependent behaviour: the ?on= default (LocalDate.now()) is reached when the parameter is omitted, but nothing pins what it should return, because the answer changes with the day.",
+        "paths": [
+          "src/main/java/fixtures/loans/LoanController.java"
+        ],
+        "why": "Deliberate in the app's design — the rule is tested against a day passed in. A test of the default would have to inject a clock, which the app has no seam for."
+      },
+      {
+        "what": "Any configuration binding. There is no src/main/resources, no application.properties and no @Value or System.getenv anywhere in src, so no configuration path is exercised beyond Spring's own SERVER_PORT.",
+        "why": "Nothing in the repo reads configuration. A change that introduces config will need the variable added here."
+      },
+      {
+        "what": "Packaging and release beyond mvn package: no container image is built, nothing is published, and the jar is never run as java -jar in the trial.",
+        "why": "The repo has no Dockerfile, compose file or deploy workflow; spring-boot:run is the documented way to run it."
+      },
+      {
+        "what": "Other JDKs. The sandbox builds with whatever java resolves to on PATH (JDK 25 in the agent container, the runner's default JDK on the runner), while CI pins Temurin 17 and the pom targets release 17.",
+        "paths": [
+          "pom.xml",
+          ".github/workflows/ci.yml"
+        ],
+        "why": "The sandbox's environment is closed and does not set JAVA_HOME, so a JDK-version regression that only shows on 17 would not be caught here; CI still covers it."
+      },
+      {
+        "what": "Static analysis. The repo has no linter, formatter or coverage plugin configured, and the guardrail baselines are empty.",
+        "paths": [
+          "pom.xml"
+        ],
+        "why": "Nothing to run: no checkstyle, spotless, errorprone or jacoco in the pom."
+      }
+    ]
+  },
+  "episode": [
+    {
+      "attempt": 1,
+      "tried": "Read pom.xml, README.md, .github/workflows/ci.yml and all five Java files, and grepped src for getenv, @Value and System.getProperty.",
+      "observed": "A single-module Spring Boot 3.3.5 web app on Java 17, three JUnit tests, no resources directory, no configuration read anywhere, no Dockerfile, compose file or devcontainer, and no third party the app calls. So: no services, no stubs, no secrets — the only open questions were whether the build works in this container and whether the app answers.",
+      "changed": "Started the manifest as plain Maven commands with an empty env."
+    },
+    {
+      "attempt": 2,
+      "tried": "mvn -B -DskipTests package in the workspace.",
+      "observed": "Failed immediately: 'Could not create local repository at /home/runner/.m2/repository'. ~/.m2 exists in the agent container but is owned by root and not writable by the runner user.",
+      "changed": "Pointed Maven's local repository at a writable path under /tmp."
+    },
+    {
+      "attempt": 3,
+      "tried": "The same build with -Dmaven.repo.local set.",
+      "observed": "Failed differently: 'Could not transfer artifact ... InvalidAlgorithmParameterException: the trustAnchors parameter must be non-empty'. curl to the same URL returns 200, so the network is fine; the JDK's lib/security/cacerts is a symlink to /etc/ssl/certs/adoptium/cacerts, which does not exist in this image — every installed Temurin (11, 17, 21, 25, and the hostedtoolcache copies) has the same dangling link.",
+      "changed": "Nothing yet — tried to repair the JDK in place first."
+    },
+    {
+      "attempt": 4,
+      "tried": "Rebuilding cacerts in place at the JDK's own path from /etc/ssl/certs/ca-certificates.crt.",
+      "observed": "The directory is mode 777 but the filesystem is read-only: [ -w ] is false and the write cannot be made. In-place repair is not available.",
+      "changed": "Moved the truststore outside the JDK: install writes /tmp/bsf-truststore.p12 and MAVEN_OPTS points Maven at it. Where the JDK's cacerts is readable (the GitHub runner) it is copied, which is instant and known-good; otherwise it is built from the system CA bundle with keytool, which took 35s here. PKCS12 is specified, and the JDK's keystore compatibility mode reads a JKS cacerts under that type too, so the copy path is safe on an older JDK."
+    },
+    {
+      "attempt": 5,
+      "tried": "The full sequence with that env from a cold local repository: install (dependency:resolve), build (package), test.",
+      "observed": "install 44s including building the truststore, build 5s, test 3s — 3 tests, 0 failures. Then both the build and test commands in an empty temporary directory: each exits 1 ('there is no POM in this directory'), so the trial's control step will see commands that genuinely depend on this repo.",
+      "changed": "Fixed install on dependency:resolve rather than dependency:go-offline, which also resolves plugin dependencies and is the flakier of the two."
+    },
+    {
+      "attempt": 6,
+      "tried": "mvn -B -ntp spring-boot:run with SERVER_PORT=8080, then curl, then Chromium via playwright-cli against the endpoint; afterwards the same three URLs the runbook's verify steps use, and the endpoint over 127.0.0.1, localhost and [::1].",
+      "observed": "HTTP 200 four seconds after start, body [{\"title\":\"The Dispossessed\",\"borrower\":\"ada\",\"daysLate\":10},{\"title\":\"Invisible Cities\",\"borrower\":\"alan\",\"daysLate\":2}], and the browser renders that JSON, so a screenshot of the main screen is takeable. ?on=2026-11-10 returns [] (not overdue on the due day) and the bare endpoint returns today's answer. GET / is 404 (no root mapping). Over IPv6 the app does not answer — embedded Tomcat binds IPv4 0.0.0.0 — while 127.0.0.1 and localhost both do.",
+      "changed": "Claimed renders, with app_url set to the endpoint rather than the origin, the ?on= parameter pinned so the page does not change with the day, and 127.0.0.1 rather than localhost so the trial's probe cannot resolve to ::1. Stopped the app and removed target/ afterwards."
+    },
+    {
+      "attempt": 7,
+      "tried": "trial of round 1: install, build, test, control, run",
+      "observed": "reached renders, as claimed",
+      "changed": null
+    }
+  ],
+  "frozen_at": "2026-11-21T05:46:24.701Z"
+}

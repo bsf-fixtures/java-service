@@ -5,34 +5,57 @@
   Every agent reads this first. The question it has to answer is "where would
   this change go?" — so it names folders and what each one owns, not what the
   product does.
-
-  {{PLACEHOLDERS}} are filled in by setup.
 -->
 
-# Feature map — {{REPO_NAME}}
+# Feature map — java-service
 
-{{ONE_LINE_WHAT_THIS_REPO_IS}}
+A single-module Spring Boot service with one HTTP endpoint, `GET
+/loans/overdue`, which lists library loans overdue on a day given to it.
 
 ## Feature folders
 
 | Folder | Owns | Depends on |
 | --- | --- | --- |
-{{FEATURE_FOLDER_ROWS}}
+| `src/main/java/fixtures/loans` | Everything the service does: `Loan` (the record and the overdue rule), `LoanController` (the `/loans/overdue` endpoint, the `OverdueLoan` response record, and the hard-coded loan list that stands in for a data source), `LoansApplication` (the Spring Boot entry point) | `spring-boot-starter-web` (`@RestController`, `@GetMapping`, Jackson), `java.time` |
+| `src/test/java/fixtures/loans` | The tests: `LoanTest` (the overdue rule, including the due-day boundary) and `LoanControllerTest` (what the endpoint returns and in what order) | the main package, `spring-boot-starter-test` — of which only JUnit Jupiter is used |
 
 ## Shared
 
 | Folder | What it is | Rule |
 | --- | --- | --- |
-{{SHARED_FOLDER_ROWS}}
+
+There is no shared folder. The whole service is one package of three classes,
+so nothing has been used twice yet and nothing has been pulled out.
 
 ## Where things go
 
-- **A new feature** gets its own folder under {{FEATURE_ROOT}}.
-- **Something used by two features** moves to {{SHARED_ROOT}}, and not before
-  the second use. One caller is not a shared concern.
+- **A new feature** gets its own folder under `src/main/java/fixtures` — a new
+  package beside `loans`, with its tests mirrored at the same path under
+  `src/test/java`.
+- **Something used by two features** moves to `src/main/java/fixtures/shared`,
+  and not before the second use. One caller is not a shared concern. No such
+  folder exists yet; the first thing that genuinely needs it creates it.
 - **Nothing in a feature folder imports from another feature folder.** Where
-  two features need the same thing, it belongs in shared.
+  two features need the same thing, it belongs in shared. (Not yet tested here:
+  there is only one feature folder.)
 
 ## Not in this repo
 
-{{OUT_OF_SCOPE}}
+- No persistence of any kind: no database, no repository layer, no migrations,
+  no JPA. The loans are a `List.of` literal in `LoanController`.
+- No configuration: there is no `src/main/resources`, no
+  `application.properties` or `application.yml`, no Spring profile, and no code
+  anywhere that reads an environment variable or system property.
+- No security: no authentication, no authorisation, no CORS configuration.
+- No outbound calls: the service talks to no other service, so there is no HTTP
+  client, no API key and nothing to stub.
+- No front end, no templates, no static assets: the only response is JSON.
+- No deployment or packaging config beyond `mvn package`: no Dockerfile, no
+  compose file, no devcontainer, no Helm chart, no deploy workflow.
+- No static analysis or coverage tooling in the build: no checkstyle, spotless,
+  errorprone, PMD or jacoco in `pom.xml`, and the factory's guardrail baselines
+  are empty.
+- No API documentation: no OpenAPI spec and no springdoc dependency.
+- `.github/workflows/factory-*` and `.factory/` are the software factory's own
+  machinery, not the app. `.github/workflows/ci.yml` is the app's CI, and runs
+  `mvn -B test` on Temurin 17.
