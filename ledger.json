@@ -1,16 +1,16 @@
 {
   "schema": "ledger/1",
-  "updated_at": "2026-11-21T07:21:47.487Z",
+  "updated_at": "2026-11-21T07:22:04.480Z",
   "open": [
     {
       "work_item": "wi_01M7YCZ1Y0XC6H3CBJC9T0RVFP",
       "pipeline": "product_work",
       "status": "in_review",
-      "fingerprint": "sha256:609cfdf8f8335a279aa03c72ccdabd5bee6e2c65b02e746fe774b65280308f1b",
       "priority": "normal",
       "created_at": "2026-11-21T06:33:41.568Z",
-      "source_ref": "#11",
-      "pr": 13
+      "fingerprint": "sha256:609cfdf8f8335a279aa03c72ccdabd5bee6e2c65b02e746fe774b65280308f1b",
+      "pr": 13,
+      "source_ref": "#11"
     }
   ],
   "recent": [],
