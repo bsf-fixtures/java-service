@@ -1,0 +1,26 @@
+# Documentation hosts the spec role may research, for this repo's own stack.
+#
+# This repository has no dependencies to derive hosts from: there is no
+# pom.xml, build.gradle, package.json or any other build manifest, so no
+# framework or library is in use and none is listed below. Nothing here was
+# guessed from the repository's name — no Spring, Quarkus, Micronaut, Jackson,
+# JUnit or Testcontainers host is listed, because nothing depends on them.
+#
+# What is listed is the toolchain that is actually installed and that any work
+# here will use: Temurin JDK 25.0.5 and Apache Maven 3.9.15. Add a framework's
+# documentation host when a build file first depends on it.
+#
+# The spec role already reaches the package registries through the `java`,
+# `node`, `python`, `go`, `rust`, `ruby` and `dotnet` bundles, plus GitHub,
+# MDN, Stack Overflow and Wikipedia, so none of those is repeated here.
+
+# The Java language and class-library reference (Java SE API docs, JLS, JVMS).
+docs.oracle.com
+
+# OpenJDK itself: JEPs, release notes, and what changed between LTS versions —
+# the runner is on JDK 25, which is newer than most Java material assumes.
+openjdk.org
+
+# Apache Maven: the build lifecycle, the POM reference, and the plugins a
+# first build file will need (surefire, failsafe, compiler, jar).
+maven.apache.org

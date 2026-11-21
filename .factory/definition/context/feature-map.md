@@ -5,34 +5,76 @@
   Every agent reads this first. The question it has to answer is "where would
   this change go?" — so it names folders and what each one owns, not what the
   product does.
-
-  {{PLACEHOLDERS}} are filled in by setup.
 -->
 
-# Feature map — {{REPO_NAME}}
+# Feature map — bsf-fixtures/java-service
 
-{{ONE_LINE_WHAT_THIS_REPO_IS}}
+A fixture repository for installing the Build Software Factory on a Java
+service. **The service does not exist yet.** Outside the factory's own files,
+the entire working tree is `README.md` and `.gitignore`; there is no build
+file, no `src/` tree and no import graph to map.
 
 ## Feature folders
 
+There are none. No application code has been written, so no folder owns a
+feature.
+
 | Folder | Owns | Depends on |
 | --- | --- | --- |
-{{FEATURE_FOLDER_ROWS}}
+| — | — | — |
 
 ## Shared
 
+There is none. Nothing is used twice because nothing is used once.
+
 | Folder | What it is | Rule |
 | --- | --- | --- |
-{{SHARED_FOLDER_ROWS}}
+| — | — | — |
+
+## What is actually here
+
+Not feature folders — this is the factory's own installation, and product
+work does not go in any of them.
+
+| Folder | What it is | Rule |
+| --- | --- | --- |
+| `.factory/definition/` | The factory definition: `factory.yaml`, `policy.yaml`, the seven role shapes under `roles/`, the rubrics under `rubrics/`, and the context templates under `context/`. | Changes need a trusted human's approval. A role prompt lives with its workflow, not here. |
+| `.factory/guardrails/` | `baselines.json` (empty — no linter is configured), `coverage.json` (0% floor, 80% diff minimum), `candidates.json` (empty). | Machine-maintained. Re-baseline through the hardener, never by hand-editing a count. |
+| `.factory/bin/` | The pinned `bsf` runner, `VERSION` (0.1.0 d2b55f899552) and `runner.tgz`. | Vendored. It is upgraded as a unit, not patched. |
+| `.github/workflows/*.md` | The source of each role workflow (spec, builder, verifier, triage, gardener, hardener, scorer) and of the setup agent. | The prompt is here. Edit this, then recompile. |
+| `.github/workflows/*.lock.yml` | What `gh aw compile` produces from each `.md`. Header says `DO NOT EDIT`. | Never hand-edited; `factory-audit` fails when a lock file has drifted from its source. |
+| `.github/workflows/factory-*.yml` | The orchestration: intake, gates, run, rollup, merge, policy, audit, garden, conflicts, review, recompile, sync, setup, setup-trial. | Plain Actions workflows, not compiled. |
+| `.claude/skills/` | The bundled `playwright-cli` skill. Untracked. | Harness tooling, not product code. |
 
 ## Where things go
 
-- **A new feature** gets its own folder under {{FEATURE_ROOT}}.
-- **Something used by two features** moves to {{SHARED_ROOT}}, and not before
-  the second use. One caller is not a shared concern.
+Nothing below is established practice — it is the convention a first change
+should set, since there is no existing layout to follow.
+
+- **A new feature** gets its own folder under `src/main/java/<group>/<feature>/`,
+  once a Maven or Gradle build file and a group/package root exist. Which build
+  tool and which package root is the first real decision this repo has to make;
+  it has not been made.
+- **Something used by two features** moves to `src/main/java/<group>/shared/`,
+  and not before the second use. One caller is not a shared concern.
 - **Nothing in a feature folder imports from another feature folder.** Where
   two features need the same thing, it belongs in shared.
 
 ## Not in this repo
 
-{{OUT_OF_SCOPE}}
+- **The Java service itself.** No `pom.xml`, `build.gradle(.kts)`,
+  `settings.gradle`, `gradlew`, `mvnw` or `.mvn/`; no `src/main/` and no
+  `src/test/`.
+- **Any container or local-orchestration setup.** No `Dockerfile`, no
+  `compose.yaml`/`docker-compose.yml`, no `.devcontainer/`.
+- **Any application CI.** The 20 workflows under `.github/workflows/` are all
+  the factory's own; none installs, builds, tests or deploys an application.
+- **Any datastore, migration or seed data.** Nothing connects to a database,
+  cache, broker or object store, so the sandbox declares no services.
+- **Any application configuration.** No `.env`, `.env.example`,
+  `application.yml` or `application.properties`. The only environment
+  variables this repository references are the factory's own GitHub Actions
+  secrets, which deliberately stay out of the sandbox.
+- **Any linter or static-analysis config.** No Checkstyle, SpotBugs, PMD,
+  ErrorProne or Spotless, which is why `baselines.json` has an empty rules map.
+- **Documentation.** No `docs/`; `README.md` is two lines.

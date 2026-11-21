@@ -1,0 +1,162 @@
+{
+  "schema": "sandbox/1",
+  "tier": "static",
+  "tier_reason": "There is no application in this repository to build, test or start. The whole working tree is README.md, .gitignore, the factory's own definition under .factory/ and its compiled workflows under .github/workflows/ — 56 tracked files, none of them source. There is no pom.xml, build.gradle, build.gradle.kts, settings.gradle, package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile or *.csproj, no src/ tree, and no Dockerfile, compose file or devcontainer. A JDK (Temurin 25.0.5) and Maven 3.9.15 are on the runner, but there is no project for them to act on, so install, build, test and run are all null and the tier is static. It becomes build_and_test the moment a build file and sources exist; see capabilities.not_exercised for the paths that should trigger that amendment.",
+  "commands": {
+    "install": null,
+    "build": null,
+    "run": null,
+    "test": null,
+    "seed": null
+  },
+  "app_url": null,
+  "env": [],
+  "services": [],
+  "egress": [],
+  "stubs": [],
+  "dropped": [
+    {
+      "from": ".github/workflows/factory-*.yml and factory-role-*.lock.yml",
+      "what": "The factory's own orchestration on GitHub Actions: intake, gates, the role workflows, the merge queue, the nightly garden, audit, and this setup/trial pair.",
+      "why": "They describe how the factory runs itself in CI, not what an application needs installed. None of their steps, checkouts, artifacts or app-token exchanges belong in the sandbox, and the sandbox does not run inside Actions."
+    },
+    {
+      "from": ".github/workflows/* (engine.env, github-app, secrets blocks)",
+      "what": "The 33 environment variables the workflows reference — ANTHROPIC_API_KEY, FACTORY_APP_CLIENT_ID, FACTORY_APP_PRIVATE_KEY, FACTORY_SANDBOX_ENV, COPILOT_GITHUB_TOKEN, the GH_AW_* set, GITHUB_TOKEN and the rest (`bsf consistency` lists them).",
+      "why": "Every one is a credential or wiring for the factory's own GitHub Actions runs, held by the repository owner. None is read by an application, and putting any of them in the sandbox would hand the owner's credentials to agent code. The sandbox environment is therefore empty."
+    },
+    {
+      "from": "README.md",
+      "what": "The description of this repository as 'a fixture of a Java service to install factory on'.",
+      "why": "It states the intent for the repository, not a stack that exists. Nothing was inferred from it into commands or services; the manifest records only what is in the tree."
+    }
+  ],
+  "capabilities": {
+    "exercised": [
+      "Reading, reviewing and editing every file the repository contains: README.md, .gitignore, the factory definition under .factory/definition/, the guardrail files under .factory/guardrails/, and the workflow sources under .github/workflows/.",
+      "The factory's own self-checks, which need no application and pass today: `bsf doctor --root .` (reports nothing broken, installed=true) and `bsf consistency --root .` (1 of 6 checks applies; it reports env_no_example for the workflows' own Actions secrets).",
+      "JSON-schema validation of the guardrail and definition files, and `bsf sandbox check` on this manifest.",
+      "Static review of workflow YAML and Markdown — spelling, structure, links, and whether a compiled *.lock.yml is current with its *.md source (what factory-audit checks)."
+    ],
+    "not_exercised": [
+      {
+        "what": "Compiling a Java service. No build file and no sources exist, so there is nothing to compile and no dependency set to resolve.",
+        "paths": [
+          "pom.xml",
+          "build.gradle",
+          "build.gradle.kts",
+          "settings.gradle",
+          "settings.gradle.kts",
+          "gradle/**",
+          "gradlew",
+          "mvnw",
+          ".mvn/**",
+          "src/main/**"
+        ],
+        "why": "A change that adds any of these makes the sandbox out of date: it should then declare a real install/build command (Maven 3.9.15 and Temurin 25 are already on the runner) and move to build_and_test. This is the amendment this manifest expects first."
+      },
+      {
+        "what": "Running tests, and therefore the coverage half of gate 2. There is no test source tree and no test framework on the dependency list, because there is no dependency list.",
+        "paths": [
+          "src/test/**",
+          "**/*Test.java",
+          "**/*Tests.java",
+          "**/*IT.java"
+        ],
+        "why": "commands.test is null — a fact about the repository, not a gap in the manifest. `bsf gates coverage` has a 0% floor in .factory/guardrails/coverage.json to match."
+      },
+      {
+        "what": "Starting the service and seeing it answer: HTTP endpoints, health checks, a rendered page, and any browser verification.",
+        "paths": [
+          "src/main/resources/application*.yml",
+          "src/main/resources/application*.properties",
+          "src/main/resources/**"
+        ],
+        "why": "commands.run and app_url are null because there is no process to start and no port to answer on. The verifier cannot take a screenshot or drive a browser here, so no change can be verified by running it."
+      },
+      {
+        "what": "Anything behind a datastore, cache, message broker, object store or mail catcher.",
+        "paths": [
+          "**/*Repository.java",
+          "**/*Entity.java",
+          "src/main/resources/db/**",
+          "**/migrations/**",
+          "**/flyway/**",
+          "**/liquibase/**"
+        ],
+        "why": "services is empty because nothing in the repository connects to one. The first code that does needs a service added here — an official Postgres/Redis/etc. image on a loopback port with throwaway credentials — before it can be exercised."
+      },
+      {
+        "what": "Configuration and secret handling: how the service reads its environment, what it does when a variable is missing, and any third-party client.",
+        "paths": [
+          "**/*Config.java",
+          "**/*Properties.java",
+          ".env.example"
+        ],
+        "why": "env is empty because no application code reads any variable. The only variables this repository references are the factory's own Actions secrets, which are deliberately kept out of the sandbox (see dropped). No third party is reached, so no stub was needed."
+      },
+      {
+        "what": "Linting and static-analysis rules for Java — Checkstyle, SpotBugs, PMD, ErrorProne, Spotless.",
+        "paths": [
+          "checkstyle.xml",
+          "config/checkstyle/**",
+          "spotbugs-exclude.xml",
+          "pmd.xml",
+          ".editorconfig"
+        ],
+        "why": "No linter is configured, so .factory/guardrails/baselines.json has an empty rules map and gate 1 has nothing to compare. Adding a linter means re-baselining, not just adding the config."
+      }
+    ]
+  },
+  "episode": [
+    {
+      "attempt": 1,
+      "tried": "Looked for the build manifest: searched the tree for pom.xml, build.gradle(.kts), settings.gradle, package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile and *.csproj, and listed every tracked file with `git ls-files`.",
+      "observed": "56 tracked files and not one build manifest. Outside .factory/, .github/ and .claude/ the working tree is exactly two files: README.md (two lines) and .gitignore (one rule, for Playwright CLI output). History is a single squashed commit, 64218cf, and there is no other branch.",
+      "changed": "Stopped treating this as an app to be discovered and started treating 'there is no app yet' as the finding to write down."
+    },
+    {
+      "attempt": 2,
+      "tried": "Looked for what the repo needs installed, and for anything production-shaped to leave out: README, docs, CI workflows, Dockerfiles, compose files, devcontainers.",
+      "observed": "No Dockerfile, no compose file, no devcontainer, no docs directory. The 20 workflows under .github/workflows/ are all the factory's own (intake, gates, roles, merge, garden, audit, setup, trial); none installs or builds an application. Nothing describes a deploy or a release either, so the only things to record under `dropped` are the factory's own CI and its Actions secrets.",
+      "changed": "Recorded the factory's workflows and their 33 Actions variables under `dropped` rather than silently ignoring them."
+    },
+    {
+      "attempt": 3,
+      "tried": "Looked for every place configuration is read, so no variable would be missing from a closed environment. Ran `.factory/bin/bsf consistency --root .` to cross-check my own reading.",
+      "observed": "It found 33 environment variables read across 55 files — ANTHROPIC_API_KEY, FACTORY_APP_CLIENT_ID, FACTORY_APP_PRIVATE_KEY, FACTORY_SANDBOX_ENV, COPILOT_GITHUB_TOKEN, the GH_AW_* set and so on. Every one is read by a workflow, by gh-aw or by the bsf runner; none by application code, because there is none. They are the repository owner's credentials.",
+      "changed": "Left `env` empty deliberately, and said why in `dropped`, so the emptiness reads as a decision rather than an omission."
+    },
+    {
+      "attempt": 4,
+      "tried": "Checked what the toolchain can actually do here: java, javac, mvn, gradle, node, python3, docker.",
+      "observed": "Temurin JDK 25.0.5 (JAVA_HOME=/usr/lib/jvm/temurin-25-jdk-amd64), Apache Maven 3.9.15, Node 24.22.3, Python 3.14.4, Docker 29.4.2 — all present. `gradle -v` fails without a project. So the ingredients for a Java service are installed; the service is not.",
+      "changed": "Nothing in the manifest: an available toolchain is not a build command."
+    },
+    {
+      "attempt": 5,
+      "tried": "Considered declaring Maven commands anyway (`mvn -B -ntp dependency:go-offline`, `mvn -B -ntp verify`) so the sandbox would already be wired for the Java service the factory is expected to write, and separately considered guarding them with `[ -f pom.xml ] || echo skip` so they would exit 0 today.",
+      "observed": "Both are worse than null. Unguarded, `mvn` with no POM exits non-zero — and `startSandbox` throws when `commands.install` fails, so every role calling `bsf sandbox start` would hard-fail on a sandbox that is otherwise fine. Guarded, the commands exit 0 while doing nothing, the trial would measure build_and_test, and gate 2 would pass vacuously on every change forever — a claim of verification where none happened.",
+      "changed": "Kept all four commands null and claimed `static`, and listed the build/test/run paths under capabilities.not_exercised instead, which is the signal that opens an amendment episode when the sources arrive."
+    },
+    {
+      "attempt": 6,
+      "tried": "Ran `.factory/bin/bsf doctor --root .`, `.factory/bin/bsf consistency --root .` and `.factory/bin/bsf sandbox check --file .../manifest.json` to establish what verification here can honestly claim, and to validate this manifest.",
+      "observed": "doctor: nothing broken, installed=true. consistency: 1 of 6 checks applies (the other five need a package.json, a .env.example or a runbook), reporting env_no_example for the workflows' own secrets. sandbox check: the manifest validates.",
+      "changed": "Wrote those three as the `exercised` capabilities — they are the only things that can be run here and pass."
+    },
+    {
+      "attempt": 7,
+      "tried": "Rather than only claiming a tier, ran the trial against this candidate locally with the same code path the runner uses: `bsf sandbox trial --candidate manifest.json --out trial.json`.",
+      "observed": "`reached=static, claimed=static, met=true`. The three null steps (install, build, test) recorded ok with no command; run and screenshot were skipped because commands.run and app_url are null. Nothing was left running and the working tree was unchanged.",
+      "changed": "Nothing — the claim is the measurement, so the manifest went out as written."
+    },
+    {
+      "attempt": 8,
+      "tried": "trial of round 1: nothing to run",
+      "observed": "reached static, as claimed",
+      "changed": null
+    }
+  ],
+  "frozen_at": "2026-11-21T04:41:48.634Z"
+}

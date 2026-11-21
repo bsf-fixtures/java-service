@@ -7,13 +7,22 @@
   and repeating it in prose means two things to keep in step.
 -->
 
-# History — {{REPO_NAME}}
+# History — bsf-fixtures/java-service
+
+There is no history. The repository has a single squashed commit (`64218cf`,
+"Upgrade the factory to e29d8e0 (#3)"), no other branch, and no application
+code that could have gone wrong. No corrections were mined: this is a fresh
+fixture rather than someone's working repository, so there are no agent
+sessions to read, and `.factory/guardrails/candidates.json` is an empty list.
+
+Every table below is empty because nothing has happened yet, not because
+setup did not look. The scheduled review fills them as the factory runs.
 
 ## Lessons
 
 | What happened | What to do instead | Where it came from |
 | --- | --- | --- |
-{{LESSON_ROWS}}
+| — | — | — |
 
 ## Problem classes already eliminated
 
@@ -22,7 +31,7 @@ recognisable as one.
 
 | Problem class | How it was eliminated | When |
 | --- | --- | --- |
-{{ELIMINATED_ROWS}}
+| — | — | — |
 
 ## Escalations
 
@@ -31,4 +40,18 @@ is a signal about the factory rather than about the work.
 
 | Work item | Where it stopped | Cause |
 | --- | --- | --- |
-{{ESCALATION_ROWS}}
+| — | — | — |
+
+## The one thing setup already knows will bite
+
+Not a lesson yet — nothing has failed — but the first predictable failure, so
+it is recognisable when it happens rather than diagnosed from scratch:
+
+the sandbox is tier `static`, so **no change made here can be run, tested or
+seen**. The first work item that writes Java will produce a PR the verifier
+cannot verify. That is expected and is the designed trigger for a sandbox
+amendment: the build, test and run paths are listed under
+`capabilities.not_exercised` in the manifest precisely so that touching them
+opens an amendment episode rather than producing a confident unverified PR.
+If instead the factory merges that PR claiming verification, the fault is in
+the gates reading the tier, and it belongs in Lessons above.
