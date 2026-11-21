@@ -3,3 +3,4 @@ spring.io
 junit.org
 maven.apache.org
 docs.oracle.com
+jacoco.org
