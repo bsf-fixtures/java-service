@@ -1,0 +1,5 @@
+docs.spring.io
+spring.io
+junit.org
+maven.apache.org
+docs.oracle.com
