@@ -1,6 +1,6 @@
 {
   "schema": "index/1",
-  "updated_at": "2026-11-21T15:02:23.812Z",
+  "updated_at": "2026-11-21T16:54:13.000Z",
   "factory": {
     "runner": "0.1.0 source",
     "harness": "claude-code"
@@ -14,8 +14,8 @@
     "human_interactions_per_pr": null,
     "revert_rate": 0,
     "spend_usd": 0,
-    "cycle_time_p50_sec": 0,
-    "cycle_time_p90_sec": 0,
+    "cycle_time_p50_sec": 33121,
+    "cycle_time_p90_sec": 33121,
     "by_pipeline": {}
   },
   "recent_runs": [],
