@@ -21,5 +21,92 @@
   "pr": null,
   "parent": null,
   "related": [],
-  "spec": null
+  "spec": {
+    "plan": "Before: the service has one endpoint, GET /loans/overdue, which lists individual overdue loans most overdue first. There is no borrower-level view, and no borrower in the controller's hard-coded loan list has more than one overdue loan, so a per-borrower count would always be 1. After: a second endpoint, GET /borrowers/overdue?on=YYYY-MM-DD, returns one flat JSON row per borrower with at least one loan overdue on that day — {\"borrower\",\"overdueLoans\",\"totalDaysLate\"} — most total days late first, and a fourth loan exists so a borrower with two overdue loans can actually be seen.\n\nThe decisions, so the builder has none left:\n\n1. Both changes go in src/main/java/fixtures/loans/LoanController.java. A new fixtures/borrowers feature folder would have to import Loan and the loan list from fixtures/loans, which feature-map.md forbids across feature folders; avoiding that means first extracting both into fixtures/shared. That extraction is a separate work item and is not done here.\n\n2. Add a fourth loan to the existing List.of in LoanController, as the last element: new Loan(\"A Wizard of Earthsea\", \"ada\", LocalDate.of(2026, 11, 22)). The due date is chosen so that the two /loans/overdue responses the runbook and the sandbox manifest pin (?on=2026-11-20 and ?on=2026-11-10) stay byte-identical: 2026-11-20 is not after 2026-11-22, so the new loan is invisible on both. It is 8 days late on 2026-11-30, which is the day the new endpoint's checks use.\n\n3. Add a response record nested in LoanController, beside OverdueLoan: public record BorrowerOverdue(String borrower, int overdueLoans, long totalDaysLate) {}. Component order is the JSON field order, and all three are always present — no envelope, no nulls.\n\n4. Add the endpoint on LoanController: @GetMapping(\"/borrowers/overdue\") public List<BorrowerOverdue> overdueByBorrower(@RequestParam(required = false) LocalDate on). Same parameter shape as overdue(), so ?on= is an optional ISO date and the endpoint answers 200 without it. Body: stream the loans, .filter(l -> l.overdueOn(day)), group with Collectors.groupingBy(Loan::borrower), then map each group to new BorrowerOverdue(borrower, group.size(), group.stream().mapToLong(l -> l.daysLate(day)).sum()) and .toList(). No service class, no mutable accumulator.\n\n5. Sort with an explicit comparator at the call site, as LoanController already does: totalDaysLate descending, and where two borrowers are level, borrower name ascending. The tie-break is required for a stable answer, not for the request — groupingBy returns a HashMap, so without a total order the output of a tie would vary between runs. No borrower names tie in the current data, so no test pins it.\n\n6. Keep LocalDate.now() to exactly one occurrence, which fundamentals.md records as this repo's Time pattern. Extract the existing default into a private static helper on LoanController — dayOrToday(LocalDate on) returning on == null ? LocalDate.now() : on — and call it from both overdue() and overdueByBorrower(). Move the \"only place the clock is read\" rationale onto that helper as its one Javadoc line. The overdue() method's own Javadoc and its behaviour are otherwise unchanged.\n\n7. One Javadoc line on the new endpoint saying why it exists, in the existing style — e.g. \"Borrowers with something overdue on the given day (default today), most days late first.\" No comments inside method bodies.\n\nNothing else changes: no new dependency, no pom.xml edit, no Spring context in the tests, no change to Loan.java.",
+    "files": [
+      "src/main/java/fixtures/loans/LoanController.java",
+      "src/test/java/fixtures/loans/LoanControllerTest.java"
+    ],
+    "feature_folders": [
+      "src/main/java/fixtures/loans",
+      "src/test/java/fixtures/loans"
+    ],
+    "acceptance_checks": [
+      "With the app running (mvn -B -ntp spring-boot:run), curl -s 'http://127.0.0.1:8080/borrowers/overdue?on=2026-11-30' returns exactly [{\"borrower\":\"ada\",\"overdueLoans\":2,\"totalDaysLate\":28},{\"borrower\":\"alan\",\"overdueLoans\":1,\"totalDaysLate\":12},{\"borrower\":\"grace\",\"overdueLoans\":1,\"totalDaysLate\":5}] — ada's two overdue loans are one row with a count of 2 and their days summed (20 + 8), and the rows run most days late first.",
+      "curl -s 'http://127.0.0.1:8080/borrowers/overdue?on=2026-11-20' returns exactly [{\"borrower\":\"ada\",\"overdueLoans\":1,\"totalDaysLate\":10},{\"borrower\":\"alan\",\"overdueLoans\":1,\"totalDaysLate\":2}] — grace is absent because Middlemarch (due 2026-11-25) is not overdue yet, and ada counts 1 because A Wizard of Earthsea (due 2026-11-22) is not overdue yet either.",
+      "curl -s 'http://127.0.0.1:8080/borrowers/overdue?on=2026-11-10' returns exactly [] — The Dispossessed is due that day, and a loan is not overdue on its due day.",
+      "curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/borrowers/overdue' returns 200 with a JSON array body, so the on parameter is optional exactly as it is on /loans/overdue. The contents depend on the day it is run and are not pinned.",
+      "The existing endpoint is unchanged: curl -s 'http://127.0.0.1:8080/loans/overdue?on=2026-11-20' still returns exactly [{\"title\":\"The Dispossessed\",\"borrower\":\"ada\",\"daysLate\":10},{\"title\":\"Invisible Cities\",\"borrower\":\"alan\",\"daysLate\":2}], and curl -s 'http://127.0.0.1:8080/loans/overdue?on=2026-11-10' still returns exactly []."
+    ],
+    "tests_added": [
+      "fixtures.loans.LoanControllerTest.groupsOverdueLoansByBorrowerMostDaysLateFirst — new LoanController().overdueByBorrower(LocalDate.of(2026, 11, 30)) returns exactly three rows in order: (\"ada\", 2, 28), (\"alan\", 1, 12), (\"grace\", 1, 5). Asserts size and every field of every row with assertEquals.",
+      "fixtures.loans.LoanControllerTest.omitsBorrowersWithNothingOverdue — overdueByBorrower(LocalDate.of(2026, 11, 20)) returns exactly two rows in order: (\"ada\", 1, 10), (\"alan\", 1, 2). grace has nothing overdue that day and does not appear.",
+      "fixtures.loans.LoanControllerTest.listsNoBorrowerOnADueDay — overdueByBorrower(LocalDate.of(2026, 11, 10)) returns an empty list, pinning the due-day boundary at the borrower level."
+    ],
+    "tests_changed": [
+      "src/test/java/fixtures/loans/LoanControllerTest.java"
+    ],
+    "research": [
+      {
+        "claim": "The request in full: add GET /borrowers/overdue?on=YYYY-MM-DD returning each borrower with at least one overdue loan on that day, the number of overdue loans, and their total days late, most days late first; a loan is not overdue on its due day. That fixes the route, the three fields, the sort key and the boundary — no part of the response shape is my invention except the field names.",
+        "source": "https://github.com/bsf-fixtures/java-service/issues/11"
+      },
+      {
+        "claim": "The data is a private final List.of of three loans: The Dispossessed/ada/2026-11-10, Middlemarch/grace/2026-11-25, Invisible Cities/alan/2026-11-18. Every borrower is distinct, so with this list unchanged the requested 'number of overdue loans' is 1 for every row on every day and the feature cannot be seen working. That is why the plan adds a fourth loan rather than only an endpoint.",
+        "source": "src/main/java/fixtures/loans/LoanController.java:11"
+      },
+      {
+        "claim": "The existing endpoint's shape to copy: @GetMapping on a method taking @RequestParam(required = false) LocalDate on, defaulting with LocalDate.now(), then a stream of filter/map/sorted/toList with the comparator written inline, returning the record directly for Jackson. The new endpoint mirrors this; no ResponseEntity, no service layer.",
+        "source": "src/main/java/fixtures/loans/LoanController.java:20"
+      },
+      {
+        "claim": "overdueOn is today.isAfter(due) and daysLate returns whole days or 0 when not late. Both already take the day as a parameter, so the new endpoint needs no change to Loan at all — it reuses both methods, and the due-day boundary the request restates is already the rule.",
+        "source": "src/main/java/fixtures/loans/Loan.java:7"
+      },
+      {
+        "claim": "'A new feature gets its own folder'; 'Something used by two features moves to src/main/java/fixtures/shared, and not before the second use'; 'Nothing in a feature folder imports from another feature folder.' A fixtures/borrowers package would need Loan and the loan list from fixtures/loans, so it could only be done by first creating shared — a bigger change than the endpoint. Hence the endpoint stays in fixtures/loans, and the extraction is called out in plan as a separate work item.",
+        "source": ".factory/definition/context/feature-map.md:32"
+      },
+      {
+        "claim": "The Time pattern: 'LocalDate.now() appears exactly once, in the controller, as the default for a missing ?on='. Giving the second endpoint its own on == null ? LocalDate.now() : on would make it twice, so the plan extracts the one-line private helper instead of copying the expression.",
+        "source": ".factory/definition/context/fundamentals.md:22"
+      },
+      {
+        "claim": "'The response type is a record nested in the controller that returns it (LoanController.OverdueLoan), not a separate DTO package', plus the taste line 'Keep the endpoint's JSON flat: title, borrower, and a number. No envelope, no nulls.' BorrowerOverdue is therefore nested beside OverdueLoan and is three flat scalars.",
+        "source": ".factory/definition/context/fundamentals.md:25"
+      },
+      {
+        "claim": "'An explicit comparator written at the call site rather than making the domain type Comparable.' The new sort follows that: a lambda on totalDaysLate descending with a borrower-name tie-break, not Comparable and not Comparator.comparing chains, matching (a, b) -> Long.compare(b.daysLate(), a.daysLate()) one line above it.",
+        "source": ".factory/definition/context/fundamentals.md:27"
+      },
+      {
+        "claim": "The deliberate exception: the hard-coded List.of in LoanController 'stays' because a repository for three literals would be a bigger change than the code it replaces. So the fourth loan is added to that list in place; the plan does not move the data out, and does not add persistence.",
+        "source": ".factory/definition/context/fundamentals.md:73"
+      },
+      {
+        "claim": "The test pattern: JUnit 5, statically imported assertEquals/assertFalse, 'new LoanController()' directly, no @SpringBootTest, no MockMvc, no AssertJ; names are sentences stating the rule; 'Keep the tests arithmetical: a fixed date in, an exact list out.' The three new tests are written that way and go in LoanControllerTest because LoanController is the class under test — which is why that existing file is declared in tests_changed.",
+        "source": ".factory/definition/context/fundamentals.md:28"
+      },
+      {
+        "claim": "product_work may_change: [code, tests] only. The runbook and the sandbox manifest are under .factory/definition/** and .factory/sandbox/** and cannot be touched by this pipeline, so the plan must not make their pinned /loans/overdue responses wrong — which is why the fourth loan's due date is 2026-11-22. tests.declared_edits is required, hence tests_changed.",
+        "source": ".factory/definition/policy.yaml:51"
+      },
+      {
+        "claim": "capabilities.exercised covers the app running under mvn spring-boot:run and 'The HTTP contract of GET /loans/overdue, with and without the ?on= parameter, including ordering', and a browser rendering that JSON. A new GET endpoint on the same app is exercisable the same way, so every acceptance check above is doable here. not_exercised lists clock-dependent behaviour, which is why the bare-?on= check pins only the status code and that the body is an array.",
+        "source": ".factory/sandbox/manifest.json:45"
+      },
+      {
+        "claim": "Baseline on main in this sandbox: 'Tests run: 3, Failures: 0, Errors: 0' (LoanTest 2, LoanControllerTest 1), BUILD SUCCESS. The manifest's install command had to run first to build /tmp/bsf-truststore.p12 — without it the parent POM will not resolve.",
+        "source": "ran: mvn -B -ntp test"
+      },
+      {
+        "claim": "Against the app running from current main: [{\"title\":\"The Dispossessed\",\"borrower\":\"ada\",\"daysLate\":20},{\"title\":\"Invisible Cities\",\"borrower\":\"alan\",\"daysLate\":12},{\"title\":\"Middlemarch\",\"borrower\":\"grace\",\"daysLate\":5}]. Those are the measured per-loan figures the expected totals are built from: ada 20 plus the new loan's 8 = 28, alan 12, grace 5. ?on=2026-11-20 returned the two-loan list and ?on=2026-11-10 returned [], both unchanged by a loan due 2026-11-22.",
+        "source": "ran: curl -s 'http://127.0.0.1:8080/loans/overdue?on=2026-11-30'"
+      },
+      {
+        "claim": "404 on current main, confirming the route is free and that this is a new mapping rather than a change to an existing one. The same run also confirmed Jackson serialises a record's components in declaration order, which is what makes the expected JSON field order above exact.",
+        "source": "ran: curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/borrowers/overdue?on=2026-11-30'"
+      }
+    ]
+  }
 }
