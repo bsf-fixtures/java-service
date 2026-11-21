@@ -7,7 +7,8 @@
     "build": "mvn -B -ntp -DskipTests package",
     "run": "mvn -B -ntp spring-boot:run",
     "test": "mvn -B -ntp test",
-    "seed": null
+    "seed": null,
+    "coverage": "rm -rf target/coverage target/site/jacoco && mvn -B -ntp org.jacoco:jacoco-maven-plugin:0.8.16:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.16:report && python3 -I - target/site/jacoco/jacoco.xml target/coverage/lcov.info <<'PY'\nimport os, sys, xml.etree.ElementTree as ET\nsrc, dst = sys.argv[1], sys.argv[2]\nindex = {}\nfor root, dirs, files in os.walk(\".\"):\n    dirs[:] = [d for d in dirs if d not in (\".git\", \"target\", \"build\", \"node_modules\")]\n    for f in files:\n        index.setdefault(f, []).append(os.path.relpath(os.path.join(root, f), \".\").replace(os.sep, \"/\"))\nout = []\nfor pkg in ET.parse(src).getroot().iter(\"package\"):\n    pkgdir = pkg.get(\"name\", \"\")\n    for sf in pkg.iter(\"sourcefile\"):\n        name = sf.get(\"name\", \"\")\n        want = \"%s/%s\" % (pkgdir, name) if pkgdir else name\n        hits = [p for p in index.get(name, []) if p.endswith(want)]\n        path = hits[0] if hits else \"src/main/java/\" + want\n        lines = [(int(l.get(\"nr\", \"0\")), int(l.get(\"ci\", \"0\")), int(l.get(\"mb\", \"0\")), int(l.get(\"cb\", \"0\"))) for l in sf.iter(\"line\")]\n        if not lines:\n            continue\n        out.append(\"SF:\" + path)\n        for nr, ci, mb, cb in lines:\n            out.append(\"DA:%d,%d\" % (nr, ci))\n            for i in range(mb + cb):\n                out.append(\"BRDA:%d,0,%d,%d\" % (nr, i, 1 if i < cb else 0))\n        out.append(\"LF:%d\" % len(lines))\n        out.append(\"LH:%d\" % sum(1 for _, ci, _, _ in lines if ci > 0))\n        out.append(\"end_of_record\")\nif not out:\n    sys.exit(\"no sourcefile line data in \" + src)\nos.makedirs(os.path.dirname(dst) or \".\", exist_ok=True)\nopen(dst, \"w\").write(\"\\n\".join(out) + \"\\n\")\nprint(\"wrote %s: %d file(s)\" % (dst, sum(1 for l in out if l.startswith(\"SF:\"))))\nPY"
   },
   "app_url": "http://127.0.0.1:8080/loans/overdue?on=2026-11-20",
   "env": [
@@ -49,7 +50,9 @@
       "The app running: mvn spring-boot:run starts the embedded Tomcat and GET /loans/overdue answers 200 with the JSON list within ~5s of a warm local repository.",
       "The HTTP contract of GET /loans/overdue, with and without the ?on= parameter, including ordering (most overdue first) and the daysLate field.",
       "A browser loading that URL: Chromium renders the JSON response, so a visual check of the endpoint is possible.",
-      "Changes to the overdue rule (Loan.overdueOn / Loan.daysLate), to the controller's mapping and response shape, and to the tests."
+      "Changes to the overdue rule (Loan.overdueOn / Loan.daysLate), to the controller's mapping and response shape, and to the tests.",
+      "Line coverage of the main sources: the same 3 tests run under the JaCoCo agent, the XML report converted to lcov at target/coverage/lcov.info. 3 files, 15 of 18 lines (83.3%) with the tests as they stand; LoansApplication.main is the uncovered part.",
+      "javac's own -Xlint:all warnings over src/main and src/test, as SARIF at target/static/javac.sarif. Clean on the repo as it stands (0 findings), and it fires on the rule pack's own bad examples: 3 rawtypes, 1 unchecked and 1 fallthrough."
     ],
     "not_exercised": [
       {
@@ -83,11 +86,23 @@
         "why": "The sandbox's environment is closed and does not set JAVA_HOME, so a JDK-version regression that only shows on 17 would not be caught here; CI still covers it."
       },
       {
-        "what": "Static analysis. The repo has no linter, formatter or coverage plugin configured, and the guardrail baselines are empty.",
+        "what": "Any checker beyond the compiler. javac -Xlint finds what the compiler already knows at the source level — raw types, unchecked casts, fall-through, deprecation — and nothing else. No SpotBugs, PMD or ErrorProne, so no dataflow or bug-pattern analysis; no spotless or checkstyle, so formatting and style are unchecked.",
         "paths": [
           "pom.xml"
         ],
-        "why": "Nothing to run: no checkstyle, spotless, errorprone or jacoco in the pom."
+        "why": "The pom declares no linter, formatter or analysis plugin, and the instruction is not to add a tool the repo does not use. javac is the one checker this build genuinely runs, so it is the one wired to the static gate. The rule pack declares pmd and spotless as well; hardening adds them to the pom when a change needs them, and this manifest then wants another amendment."
+      },
+      {
+        "what": "Coverage of the test sources themselves, and branch coverage as a gate number. JaCoCo instruments only what the build compiles into target/classes, so a changed file under src/test/java has no entry in the report and contributes nothing to diff coverage. Branch data is carried in the lcov as BRDA lines, but the gate counts lines.",
+        "paths": [
+          "src/test/java/fixtures/loans"
+        ],
+        "why": "Normal for JaCoCo and for the gate's line-based diff coverage; recorded so a PR that only touches tests is understood to be unmeasurable rather than uncovered."
+      },
+      {
+        "what": "Both new commands in this agent container end to end against Maven Central itself: Central answered 404 with a retry-after of about 8.6 hours to every request from this runner's egress IP for the whole round.",
+        "paths": [],
+        "why": "An egress-reputation block, not a repo fact. Everything was verified instead through Google's byte-for-byte Central mirror, configured in a settings file under /tmp and passed via MAVEN_ARGS, so the manifest's own commands and egress list are unchanged and still point at Central. If the block reaches the runner too, the install step fails first and the trial says so."
       }
     ]
   },
@@ -133,7 +148,58 @@
       "tried": "trial of round 1: install, build, test, control, run",
       "observed": "reached renders, as claimed",
       "changed": null
+    },
+    {
+      "attempt": 8,
+      "tried": "Read amend.json, the current manifest, .factory/rules/java.yaml and the runner's own schema and gate code (schema/sandbox.json, readCoverage, countSarif, runSarifCheck and the trial's checks loop) to find out exactly what the two gates read.",
+      "observed": "The coverage gate accepts lcov, cobertura or istanbul-summary only, and keys diff coverage on repo-relative paths; the trial calls the report good when the command exits 0 and the report names at least one file. The static gate's built-in checkers are eslint, ruff, clippy, go-vet, rubocop and semgrep — nothing for Java, which is the shortfall the report describes. A SARIF check is run with bash -c, its exit code ignored, and counted per ruleId per file; writing no SARIF is what marks it unavailable.",
+      "changed": "Settled the design: JaCoCo for coverage (the only real coverage tool in Maven's ecosystem) converted to lcov, since JaCoCo emits none of the three formats; javac -Xlint:all for the static check, which is the tool the Java rule pack already names. Both invoked as fully-qualified plugin goals and plain javac, because nothing written into the repo survives this round and an amendment does not carry a guardrails patch, so neither may edit pom.xml."
+    },
+    {
+      "attempt": 9,
+      "tried": "The existing install command, unchanged, to get a working baseline.",
+      "observed": "Every artifact failed to resolve: repo.maven.apache.org and repo1.maven.org both answer 404, content-length 1, retry-after 31002, from Cloudflare with a genuine certificate — so the egress IP is blocked, not the proxy or the truststore. The truststore step itself worked (the JDK's cacerts is unreadable here, so it was built from the system CA bundle in ~35s, as before).",
+      "changed": "Nothing in the manifest. Verification was moved onto Google's Central mirror (maven-central.storage-download.googleapis.com, which answered 200) through a settings.xml in /tmp passed with MAVEN_ARGS, so every command below is the literal manifest string with no edit for the mirror. Central stays the only repository the manifest names, and the egress list is unchanged."
+    },
+    {
+      "attempt": 10,
+      "tried": "mvn org.jacoco:jacoco-maven-plugin:0.8.16:prepare-agent test org.jacoco:jacoco-maven-plugin:0.8.16:report, then a reading of the XML it wrote.",
+      "observed": "Clean: prepare-agent sets argLine, surefire picks it up unmodified by spring-boot-starter-parent, 3 tests pass, 4 classes analysed, and target/site/jacoco/jacoco.xml carries per-line <line nr ci mi mb cb/> under each <sourcefile> — enough for exact LF/LH and for branch data. 0.8.16 is the current release and instruments happily under the JDK 25 on PATH here while the classes stay release 17.",
+      "changed": "Pinned the plugin version rather than letting Maven resolve the newest, and wrote the converter: it indexes the working tree once so each <package>/<sourcefile> resolves to the real repo-relative path (src/main/java/fixtures/loans/Loan.java), which is what diff coverage keys on, and emits SF/DA/BRDA/LF/LH/end_of_record. It exits non-zero if the XML carries no line data, so a silently empty report cannot pass."
+    },
+    {
+      "attempt": 11,
+      "tried": "javac -Xlint:all --release 17 -proc:none over every file under src/, with the test-scope classpath from dependency:build-classpath; then the same with the rule pack's own bad examples pasted into a scratch class in src/main/java; then with that class made uncompilable.",
+      "observed": "Clean repo: 0 warnings, exit 0. Bad examples: 5 warnings across 3 categories (rawtypes x3, unchecked, fallthrough), each with a file and a line. Uncompilable: a flood of errors and no warnings at all — which would have reached the gate as a clean file.",
+      "changed": "Made the converter refuse to write SARIF when javac reported any error, so that case is reported as unavailable instead of as zero findings. Took the release from the pom's own <java.version> rather than hard-coding 17, with 17 as the fallback. Deleted the scratch class; git status is back to what it was."
+    },
+    {
+      "attempt": 12,
+      "tried": "Both final command strings verbatim, as single bash -c strings, the coverage one from a deleted target/ directory.",
+      "observed": "Coverage: exit 0 in 3s, lcov.info with 3 files, 15/18 lines covered, every SF path a file that exists in the repo. Static: exit 0, valid SARIF, 0 findings on the repo as it stands and 5 across 3 rules with the bad examples present. Both write only under target/, which is git-ignored, and both clear their own output first so a stale report cannot be mistaken for a fresh one.",
+      "changed": "Nothing further. Wrote them into the manifest as commands.coverage and the javac-lint static check, with coverage_report pointing at the lcov, and re-checked the manifest against the schema."
+    },
+    {
+      "attempt": 13,
+      "tried": "trial of round 1: install, build, test, control, run",
+      "observed": "reached renders, as claimed",
+      "changed": null
     }
   ],
-  "frozen_at": "2026-11-21T05:46:24.701Z"
+  "frozen_at": "2026-11-21T10:04:07.315Z",
+  "coverage_report": {
+    "path": "target/coverage/lcov.info",
+    "format": "lcov"
+  },
+  "static_checks": [
+    {
+      "name": "javac-lint",
+      "command": "rm -rf target/static target/bsf-javac && mkdir -p target/static target/bsf-javac && JV=$(grep -o '<java.version>[^<]*' pom.xml | head -1 | cut -d'>' -f2) && mvn -B -ntp org.apache.maven.plugins:maven-dependency-plugin:3.6.1:build-classpath -Dmdep.outputFile=target/bsf-classpath.txt -Dmdep.includeScope=test && javac -Xlint:all --release \"${JV:-17}\" -proc:none -d target/bsf-javac -cp \"$(cat target/bsf-classpath.txt)\" $(find src -name '*.java') > target/bsf-javac.log 2>&1; python3 -I - target/bsf-javac.log target/static/javac.sarif <<'PY'\nimport json, os, re, sys\nsrc, dst = sys.argv[1], sys.argv[2]\ntext = open(src, errors=\"replace\").read()\nif re.search(r\"^.*\\.java:\\d+: error: \", text, re.M) or re.search(r\"^error: \", text, re.M):\n    sys.exit(\"javac reported compilation errors; not writing SARIF\")\npat = re.compile(r\"^(\\S.*?\\.java):(\\d+): warning: (?:\\[([A-Za-z0-9_-]+)\\] )?(.*)$\")\nresults, rules = [], {}\nfor line in text.splitlines():\n    m = pat.match(line)\n    if not m:\n        continue\n    rule = m.group(3) or \"javac\"\n    rules[rule] = True\n    results.append({\"ruleId\": rule, \"level\": \"warning\",\n                    \"message\": {\"text\": m.group(4).strip()},\n                    \"locations\": [{\"physicalLocation\": {\n                        \"artifactLocation\": {\"uri\": m.group(1).replace(os.sep, \"/\")},\n                        \"region\": {\"startLine\": int(m.group(2))}}}]})\nlog = {\"version\": \"2.1.0\",\n       \"$schema\": \"https://json.schemastore.org/sarif-2.1.0.json\",\n       \"runs\": [{\"tool\": {\"driver\": {\"name\": \"javac\",\n                                     \"informationUri\": \"https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html\",\n                                     \"rules\": [{\"id\": r, \"name\": r} for r in sorted(rules)]}},\n                 \"results\": results}]}\nos.makedirs(os.path.dirname(dst) or \".\", exist_ok=True)\njson.dump(log, open(dst, \"w\"), indent=1)\nprint(\"wrote %s: %d finding(s) across %d rule(s)\" % (dst, len(results), len(rules)))\nPY",
+      "sarif": "target/static/javac.sarif",
+      "why": "The repo's own checker. .factory/rules/java.yaml names javac-lint as this language's linter — the compiler's own -Xlint warnings, which need nothing installed and which a developer can reproduce with the JDK they already have — and the factory has no built-in Java checker, so without this entry the static gate counts nothing on every PR. The command builds the test-scope classpath with Maven, compiles every source under src/ with -Xlint:all at the pom's own java.version, and turns each `file:line: warning: [category]` into a SARIF result whose ruleId is the lint category, which is what the gate counts per rule per file. It writes no SARIF when javac reports compilation errors, so a broken classpath is reported as unavailable rather than as a clean repo."
+    }
+  ],
+  "amended_by": [
+    "coverage-and-checkers"
+  ]
 }
