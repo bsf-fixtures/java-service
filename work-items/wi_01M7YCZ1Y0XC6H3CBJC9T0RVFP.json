@@ -1,0 +1,23 @@
+{
+  "schema": "work-item/1",
+  "id": "wi_01M7YCZ1Y0XC6H3CBJC9T0RVFP",
+  "created_at": "2026-11-21T06:33:41.568Z",
+  "source": {
+    "kind": "issue",
+    "ref": "#11",
+    "actor": "ChampPhil",
+    "via": null
+  },
+  "trigger_class": "request",
+  "pipeline": "product_work",
+  "title": "Show how many loans each borrower has overdue",
+  "body": null,
+  "priority": "normal",
+  "fingerprint": "sha256:609cfdf8f8335a279aa03c72ccdabd5bee6e2c65b02e746fe774b65280308f1b",
+  "status": "waiting_trust",
+  "runs": [],
+  "pr": null,
+  "parent": null,
+  "related": [],
+  "spec": null
+}
